@@ -1,0 +1,22 @@
+# Repositorio de codigo clonado por el pipeline para empaquetar (custom.app_path)
+app/
+
+# Serverless Framework
+.serverless/
+
+# Dependencias
+node_modules/
+package-lock.json
+
+# Sonar
+.scannerwork/
+
+# Logs
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

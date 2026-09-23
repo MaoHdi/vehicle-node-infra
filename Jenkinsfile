@@ -6,24 +6,25 @@ countryParams = envUtil.getCountryEnvDetails(env.JOB_NAME)
 
 pipeline {
   agent {
-    docker { 
+    docker {
       image 'jfrog.hdicolombia.com.co/pod-templates-latam/pipeline2.0.x:latest'
       args '''
-        -v /usr/local/aws-cli/:/usr/local/aws-cli/ 
-        --add-host sonarold.hdiseguros.com.co:172.19.0.102  
+        -v /usr/local/aws-cli/:/usr/local/aws-cli/
       '''
     }
   }
-  
+
   parameters {
     string(name: 'Ref', defaultValue: 'refs/heads/', description: 'Enter Branch Name. Example: master, develop, feature/*, release/*, hotfix/*', trim: true)
+    string(name: 'AppRef', defaultValue: 'master', description: 'Branch del repositorio de codigo co-hdi-vehicle-service-mediation-lambda a empaquetar', trim: true)
     string(name: 'Email', defaultValue: '', description: 'Enter Email notification. Example: pperez@mail.com', trim: true)
   }
 
-  options { 
+  options {
     timestamps()
     timeout(time: 3, unit: 'HOURS')
     disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr: '90'))
     office365ConnectorWebhooks([[
       name: 'JenkinsCI/CDHDI',
       url: 'https://hdiseguroscom.webhook.office.com/webhookb2/f0ce16c7-8cf8-44df-b229-bffb9b2fd76e@35681c81-d5eb-4c9e-8171-6e66bc263a82/JenkinsCI/74bd0a0dc8934a44a0b84da423ec6f86/8a138926-75ef-4b10-aad4-cd44288b5ebe/V2-QiF8q9a0wTDRrLxp_KlwXmxvPr84SSAuv0Xwl8tagQ1',
@@ -46,22 +47,36 @@ pipeline {
     TAGS = null
     REPO_NAME = null
     AWS_REGION = "us-east-1"
+    APP_REPO = "https://github.com/hdiseguroscol/co-hdi-vehicle-service-mediation-lambda.git"
   }
 
   stages {
+    // Serverless empaqueta el codigo junto con la infraestructura. Como el codigo
+    // vive en su propio repositorio, se clona en `app/` (ruta que declara
+    // serverless.yml en custom.app_path) y se instalan solo las dependencias de
+    // produccion antes de desplegar.
+    stage('Checkout App Code') {
+      steps {
+        dir('app') {
+          git branch: "${params.AppRef}", url: "${env.APP_REPO}", credentialsId: 'Github-HDI'
+          sh 'npm install --omit=dev --no-audit --no-fund'
+        }
+      }
+    }
+
     stage('Continuos Integration') {
       steps {
         dir('shared-pipelines') {
-          git branch: 'master', url: 'https://github.com/hdiseguroscol/co-hdi-jenkins-pipelines.git', credentialsId: 'Github-HDI'            
+          git branch: 'master', url: 'https://github.com/hdiseguroscol/co-hdi-jenkins-pipelines.git', credentialsId: 'Github-HDI'
         }
-        load 'shared-pipelines/cloudformation/JenkinsfileCI'
+        load 'shared-pipelines/serverless/JenkinsfileCI'
       }
     }
 
     stage('Continuos Deployment') {
       steps {
         script {
-          load 'shared-pipelines/cloudformation/JenkinsfileCD'
+          load 'shared-pipelines/serverless/JenkinsfileCD'
         }
       }
     }
